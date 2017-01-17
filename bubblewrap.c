@@ -34,6 +34,10 @@
 #include <linux/seccomp.h>
 #include <linux/filter.h>
 
+#ifndef DISABLE_SECCOMP
+#include <seccomp.h>
+#endif
+
 #include "utils.h"
 #include "network.h"
 #include "bind-mount.h"
@@ -2027,6 +2031,43 @@ main (int    argc,
       close (opt_block_fd);
     }
 
+#ifndef DISABLE_SECCOMP
+  {
+    scmp_filter_ctx ctx = NULL;
+    uint32_t extra_arches[][2] = {
+      {SCMP_ARCH_X86_64, SCMP_ARCH_X86},
+#ifdef SCMP_ARCH_AARCH64
+      {SCMP_ARCH_AARCH64, SCMP_ARCH_ARM},
+#endif
+      {0}
+    };
+    int i;
+
+    ctx = seccomp_init (SCMP_ACT_ALLOW);
+    if (!ctx)
+      die ("Initialize seccomp failed\n");
+
+    for (i = 0; extra_arches[i][0] != 0; i++)
+      {
+        if (seccomp_arch_native () == extra_arches[i][0])
+          {
+            int res = seccomp_arch_add (ctx, extra_arches[i][1]);
+            if (res < 0)
+              die ("Error adding extra arch\n");
+          }
+      }
+
+    if (seccomp_rule_add (ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(ioctl), 1,
+                          SCMP_A1(SCMP_CMP_EQ, (int)TIOCSTI)) < 0)
+      die ("Failed to add TIOCSTI rule\n");
+
+    if (seccomp_load (ctx) != 0)
+      die ("Unable to load seccomp rules");
+
+    seccomp_release (ctx);
+  }
+#endif
+
   if (opt_seccomp_fd != -1)
     {
       cleanup_free char *seccomp_data = NULL;
@@ -2121,8 +2162,14 @@ main (int    argc,
   /* We want sigchild in the child */
   unblock_sigchild ();
 
+#ifdef DISABLE_SECCOMP
+  /* If we don'y have seccomp, then we need to setsid to protect against CVE-2017-5226
+   * See e.g. https://github.com/projectatomic/bubblewrap/pull/143
+   * This workaround is pretty bad though, as it breaks shell job control.
+   */
   if (setsid () == (pid_t) -1)
     die_with_error ("setsid");
+#endif
 
   if (label_exec (opt_exec_label) == -1)
     die_with_error ("label_exec %s", argv[0]);
