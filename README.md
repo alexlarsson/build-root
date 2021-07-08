@@ -35,8 +35,8 @@ The original bubblewrap code existed before user namespaces - it inherits code f
 which in turn distantly derives from
 [linux-user-chroot](https://git.gnome.org/browse/linux-user-chroot).
 
-Security
---------
+System security
+---------------
 
 The maintainers of this tool believe that it does not, even when used
 in combination with typical software installed on that distribution,
@@ -46,6 +46,14 @@ in user to perform denial of service attacks, however.
 In particular, bubblewrap uses `PR_SET_NO_NEW_PRIVS` to turn off
 setuid binaries, which is the [traditional way](https://en.wikipedia.org/wiki/Chroot#Limitations) to get out of things
 like chroots.
+
+User security
+-------------
+
+The functionality of application-side sandboxing mechanisms (e.g. web-browsers)
+can be restricted due to seccomp rules or missing files.
+Also everything mounted into the sandbox can be used to escalate privileges
+(e.g. a dbus-socket can be used to execute commands via systemd, see [xdg-dbus-proxy](https://github.com/flatpak/xdg-dbus-proxy)).
 
 Users
 -----
